@@ -7,6 +7,21 @@ load_dotenv()
 
 # --- API Keys ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("Google_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+
+# --- Generation / Evaluation provider ---
+# Gemini exposes an OpenAI-compatible endpoint, so the existing OpenAI and
+# LangChain clients can be reused without an additional SDK dependency.
+if GOOGLE_API_KEY:
+    LLM_API_KEY = GOOGLE_API_KEY
+    LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    LLM_MODEL = "gemini-3.5-flash-lite"
+    LLM_EMBEDDING_MODEL = "gemini-embedding-001"
+else:
+    LLM_API_KEY = OPENAI_API_KEY
+    LLM_BASE_URL = None
+    LLM_MODEL = "gpt-4o-mini"
+    LLM_EMBEDDING_MODEL = "text-embedding-3-small"
 
 # --- Qdrant ---
 QDRANT_HOST = "localhost"

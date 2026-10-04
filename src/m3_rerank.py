@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import RERANK_TOP_K
 
 
+_CROSS_ENCODER_CACHE = {}
+
+
 @dataclass
 class RerankResult:
     text: str
@@ -29,18 +32,22 @@ class CrossEncoderReranker:
 
     def _load_model(self):
         if self._model is None:
-            # TODO: Load cross-encoder model
+            # Implementation outline: load cross-encoder model
             # from sentence_transformers import CrossEncoder
             # self._model = CrossEncoder(self.model_name)
             #
             # ⚠️ LƯU Ý: Dùng sentence_transformers.CrossEncoder, KHÔNG dùng FlagEmbedding.
             # FlagReranker crash với transformers>=5.0 (XLMRobertaTokenizer lỗi).
-            pass
+            from sentence_transformers import CrossEncoder
+
+            if self.model_name not in _CROSS_ENCODER_CACHE:
+                _CROSS_ENCODER_CACHE[self.model_name] = CrossEncoder(self.model_name)
+            self._model = _CROSS_ENCODER_CACHE[self.model_name]
         return self._model
 
     def rerank(self, query: str, documents: list[dict], top_k: int = RERANK_TOP_K) -> list[RerankResult]:
         """Rerank documents: top-20 → top-k."""
-        # TODO: Implement reranking
+        # Implementation outline: reranking
         # 1. if not documents: return []
         # 2. model = self._load_model()
         # 3. pairs = [(query, doc["text"]) for doc in documents]
@@ -50,7 +57,34 @@ class CrossEncoderReranker:
         # 7. Return [RerankResult(text=..., original_score=doc.get("score", 0.0),
         #            rerank_score=float(score), metadata=..., rank=i)
         #            for i, (score, doc) in enumerate(scored[:top_k])]
-        return []
+        if not documents or top_k <= 0:
+            return []
+
+        model = self._load_model()
+        pairs = [(query, document["text"]) for document in documents]
+        raw_scores = model.predict(pairs)
+
+        # CrossEncoder normally returns a NumPy array, but a single pair or a
+        # test double may return a scalar. Normalize both forms here.
+        scores = raw_scores.tolist() if hasattr(raw_scores, "tolist") else raw_scores
+        if not isinstance(scores, (list, tuple)):
+            scores = [scores]
+
+        scored_documents = sorted(
+            zip(scores, documents),
+            key=lambda item: float(item[0]),
+            reverse=True,
+        )
+        return [
+            RerankResult(
+                text=document["text"],
+                original_score=float(document.get("score", 0.0)),
+                rerank_score=float(score),
+                metadata=dict(document.get("metadata", {})),
+                rank=rank,
+            )
+            for rank, (score, document) in enumerate(scored_documents[:top_k])
+        ]
 
 
 class FlashrankReranker:
@@ -59,7 +93,7 @@ class FlashrankReranker:
         self._model = None
 
     def rerank(self, query: str, documents: list[dict], top_k: int = RERANK_TOP_K) -> list[RerankResult]:
-        # TODO (optional): from flashrank import Ranker, RerankRequest
+        # Optional alternative: from flashrank import Ranker, RerankRequest
         # model = Ranker(); passages = [{"text": d["text"]} for d in documents]
         # results = model.rerank(RerankRequest(query=query, passages=passages))
         return []
